@@ -121,7 +121,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text('Нажми на кнопку ТЫК', reply_markup=button)
 
-# Веб-сервер для Render (чтобы бот не засыпал)
 async def health_check(request):
     return web.Response(text="Bot is running")
 
@@ -134,21 +133,33 @@ async def start_web_server():
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
     print(f"Веб-сервер запущен на порту {port}")
-    await asyncio.Event().wait()
 
-def run_web_server():
-    asyncio.run(start_web_server())
-
-# Запуск бота и веб-сервера
-if __name__ == "__main__":
-    # Запускаем веб-сервер в отдельном потоке
-    web_thread = threading.Thread(target=run_web_server, daemon=True)
-    web_thread.start()
+# ГЛАВНАЯ ФУНКЦИЯ
+async def main():
+    # Создаём приложение
+    application = Application.builder().token(TOKEN).build()
+    
+    # Добавляем обработчики
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    # ОЧИЩАЕМ ВЕБХУК ПЕРЕД ЗАПУСКОМ (решает проблему Conflict)
+    print("Очистка вебхука...")
+    await application.bot.delete_webhook(drop_pending_updates=True)
+    
+    # Запускаем веб-сервер в фоне
+    asyncio.create_task(start_web_server())
     
     # Запускаем бота
     print("Запуск бота...")
-    application = Application.builder().token(TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
+    
     print("Бот успешно запущен!")
-    application.run_polling()
+    
+    # Держим бота работающим
+    await asyncio.Event().wait()
+
+if __name__ == "__main__":
+    asyncio.run(main())
